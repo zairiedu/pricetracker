@@ -39,3 +39,19 @@ Deno.test('AI input excludes executable scripts',()=>{
  const got=sanitizeForAi(input);
  if(!got.includes('Horizon treadmill')||got.includes('ignore previous'))throw Error('unsafe AI extraction input');
 });
+
+const dswUrl='https://www.dsw.ca/product/elements-youth-boys-waterproof-tech-winter-boot/863101507?activeColor=120';
+Deno.test('DSW Canada activeColor product fixture returns product not recommendations',()=>{
+ const unrelated={'@type':'Product',name:'Kamik Winter Boot',sku:'000000001',url:'https://www.dsw.ca/product/kamik-winter-boot/000000001',offers:{price:'89.96',priceCurrency:'CAD'}};
+ const desired={'@type':'Product',name:"Elements Youth Boy's Waterproof Tech Winter Boot",brand:{'@type':'Brand',name:'Elements'},sku:'863101507',color:'BLACK',url:dswUrl,image:'https://assets.designerbrands.com/test/boot.jpg',offers:{'@type':'Offer',price:'59.97',priceCurrency:'CAD',availability:'https://schema.org/InStock'}};
+ const html='<html><head><title>Elements Youth Boy\'s Waterproof Tech Winter Boot | DSW Canada</title><meta property="og:title" content="Elements Youth Boy\'s Waterproof Tech Winter Boot"></head><body>'+
+ '<script type="application/ld+json">'+JSON.stringify({'@graph':[unrelated,desired]})+'</script><h1>Elements Youth Boy\'s Waterproof Tech Winter Boot</h1></body></html>';
+ const result=parseProduct(html,dswUrl);
+ if(result.name!==desired.name||result.brand!=='Elements'||result.sku!=='863101507'||result.color!=='BLACK'||result.price!==59.97||result.currency!=='CAD'||result.priceVerified!==false)throw Error(JSON.stringify(result));
+});
+Deno.test('DSW page-title fallback never invents price or size from unrelated items',()=>{
+ const html='<html><title>Elements Youth Boy\'s Waterproof Tech Winter Boot | DSW Canada</title><h1>Elements Youth Boy\'s Waterproof Tech Winter Boot</h1>'+
+ '<section><span>Kamik</span><span>$89.96</span></section></html>';
+ const result=parseProduct(html,dswUrl);
+ if(!result.name?.includes('Elements')||result.price!==null||result.size!==null)throw Error(JSON.stringify(result));
+});
