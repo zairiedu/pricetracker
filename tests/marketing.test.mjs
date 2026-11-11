@@ -1,0 +1,15 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {calculateSlots,qualifyReferral,canRedeem,rewardIdempotencyKey} from '../packages/rules/marketing.mjs';
+test('base slots and welcome total are not accidentally additive',()=>assert.equal(calculateSlots({baseSlots:5,grants:[{type:'slot_allowance_total',quantity:20,status:'active'}]}),20));
+test('referral bonuses are additive',()=>assert.equal(calculateSlots({baseSlots:5,grants:[{type:'slot_allowance_total',quantity:20,status:'active'},{type:'bonus_slots',quantity:20,status:'active'}]}),40));
+test('expiry deactivates reward without deleting it',()=>assert.equal(calculateSlots({baseSlots:5,now:'2026-12-01T00:00:00Z',grants:[{type:'bonus_slots',quantity:20,status:'active',expiresAt:'2026-11-15T00:00:00Z'}]}),5));
+test('rejected or revoked rewards are excluded',()=>assert.equal(calculateSlots({baseSlots:5,grants:[{type:'bonus_slots',quantity:20,status:'revoked'}]}),5));
+test('protect against negative grant quantity',()=>assert.throws(()=>calculateSlots({baseSlots:5,grants:[{type:'bonus_slots',quantity:-1,status:'active'}]})));
+test('qualified referral is accepted',()=>assert.deepEqual(qualifyReferral({referrerId:'a',referredId:'b',referredVerified:true,firstRealTracker:true,activeDays:7,alreadyRewarded:false,referrerQualifiedCount:0,maxPerReferrer:10}),{eligible:true}));
+test('self referrals rejected',()=>assert.equal(qualifyReferral({referrerId:'a',referredId:'a',referredVerified:true,firstRealTracker:true,activeDays:7}).eligible,false));
+test('duplicate referral rejected',()=>assert.equal(qualifyReferral({referrerId:'a',referredId:'b',referredVerified:true,firstRealTracker:true,activeDays:7,alreadyRewarded:true}).reason,'duplicate'));
+test('campaign budgets enforced',()=>assert.equal(canRedeem({campaign:{status:'active',limits:{maxTotalRedemptions:3}},accountRedemptions:0,totalRedemptions:3}).reason,'budget_cap'));
+test('campaign defaults to nonactive',()=>assert.equal(canRedeem({campaign:{status:'draft'},accountRedemptions:0,totalRedemptions:0}).eligible,false));
+test('campaign with end date is enforced',()=>assert.equal(canRedeem({campaign:{status:'active',endsAt:'2026-10-01T00:00:00Z'},accountRedemptions:0,totalRedemptions:0,now:'2026-11-11T00:00:00Z'}).reason,'ended'));
+test('stable idempotency key',()=>assert.equal(rewardIdempotencyKey('refer','event1','user2'),'reward:refer:event1:user2'));
+test('idempotency rejects unsafe identifiers',()=>assert.throws(()=>rewardIdempotencyKey('a:b','e','u')));
