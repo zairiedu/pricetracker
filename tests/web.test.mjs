@@ -34,3 +34,11 @@ test('autofill offers user-controlled target and differentiated preview',()=>{
  assert.match(cloud,/pricepilot-preview/);
  assert.match(cloud,/preview_price/);
 });
+
+test('Supabase Edge Functions accept browser client CORS preflight headers',()=>{
+ for(const slug of ['pricepilot-preview','pricepilot-check']){
+  const edge=readFileSync(new URL('../supabase/functions/'+slug+'/index.ts',import.meta.url),'utf8');
+  assert.match(edge,/access-control-allow-headers[^\n]*x-client-info/);
+  assert.match(edge,/access-control-allow-headers[^\n]*authorization/);
+ }
+});
