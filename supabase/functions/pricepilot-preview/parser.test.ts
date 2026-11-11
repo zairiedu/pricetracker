@@ -55,3 +55,17 @@ Deno.test('DSW page-title fallback never invents price or size from unrelated it
  const result=parseProduct(html,dswUrl);
  if(!result.name?.includes('Elements')||result.price!==null||result.size!==null)throw Error(JSON.stringify(result));
 });
+
+Deno.test('Shopify-style product URL works without a retailer-specific parser',()=>{
+ const u='https://fashion-store.ca/products/winter-jacket?variant=879';
+ const product={'@context':'https://schema.org','@type':'Product',name:'Winter Parka 2026',sku:'WINTER-879',brand:{'@type':'Brand',name:'North Example'},offers:{'@type':'Offer',price:'129.95',priceCurrency:'CAD'}};
+ const html='<html><head><meta property="og:title" content="Winter Parka 2026"></head><body><script type="application/ld+json">'+JSON.stringify(product)+'</script></body></html>';
+ const result=parseProduct(html,u);
+ if(result.name!=='Winter Parka 2026'||result.price!==129.95||result.currency!=='CAD'||result.priceVerified!==false)throw Error(JSON.stringify(result));
+});
+Deno.test('Generic WooCommerce metadata works with no product JSON-LD',()=>{
+ const u='https://home-shop.ca/product/cordless-drill/';
+ const html='<html><head><meta property="og:title" content="Cordless Drill 20V"><meta property="product:price:amount" content="89.99"><meta property="product:price:currency" content="CAD"><meta property="og:image" content="https://images.home-shop.ca/drill.jpg"></head><body><h1>Cordless Drill 20V</h1></body></html>';
+ const result=parseProduct(html,u);
+ if(result.name!=='Cordless Drill 20V'||result.price!==89.99||result.source!=='page_price_metadata')throw Error(JSON.stringify(result));
+});
