@@ -82,6 +82,12 @@ Deno.serve(async request=>{
  if(!retailer)return json({error:'Retailer not yet supported for direct checks. Supported: Best Buy Canada, Walmart Canada, Canadian Tire.'},422);
  const {data:previous}=await admin.from('pricepilot_price_observations').select('amount,available,observed_at').eq('tracker_id',tracker.id).order('observed_at',{ascending:false}).limit(1).maybeSingle();
  if(previous&&Date.now()-new Date(previous.observed_at).getTime()<15*60*1000)return json({error:'Recent observation already available; wait before checking again',latest:previous},429);
+ const cutoff=new Date(Date.now()-86400000).toISOString();
+ const {count,error:budgetError}=await admin.from('pricepilot_check_attempts').select('id',{head:true,count:'exact'}).eq('user_id',user.id).gte('created_at',cutoff);
+ if(budgetError)return json({error:'Monitoring budget service unavailable'},503);
+ if((count??0)>=100)return json({error:'Daily preview-check limit reached (100 per account)'},429);
+ const {error:attemptError}=await admin.from('pricepilot_check_attempts').insert({user_id:user.id,tracker_id:tracker.id,window_slot:Math.floor(Date.now()/900000)});
+ if(attemptError)return json({error:attemptError.code==='23505'?'Only one preview check per product is allowed every 15 minutes':'Could not reserve a retailer check'},attemptError.code==='23505'?429:503);
  let extracted;try{extracted=extractOffer(await limitedHtml(retailer.href),tracker.size||'',tracker.color||'',tracker.currency)}catch(e){return json({error:'Could not verify retailer price: '+String((e as Error).message).slice(0,160)},422)}
  if(!extracted)return json({error:'No matching exact-variant JSON-LD offer with verified currency was available. No price recorded.'},422);
  const {data:observation,error:writeError}=await admin.from('pricepilot_price_observations').insert({tracker_id:tracker.id,user_id:user.id,amount:extracted.amount,currency:tracker.currency,available:extracted.available,source:'retailer_jsonld'}).select('id,amount,available,observed_at').single();
