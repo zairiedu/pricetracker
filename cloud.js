@@ -7,7 +7,7 @@ const button=$('#accountBtn'),modal=$('#accountOverlay'),form=$('#accountForm'),
 let user=null,snapshot=new Map(),queue=Promise.resolve(),syncTimer,loading=false;
 const info=s=>{message.textContent=s;message.hidden=!s};
 const notify=s=>typeof window.pricepilotToast==='function'?window.pricepilotToast(s):info(s);
-const shape=x=>({id:x.id,url:x.url,name:x.name,target:Number(x.target),currency:x.currency,size:x.size||'',color:x.color||'',stock:!!x.stock,buy:!!x.buy,price:x.price??null,available:x.available??null,checked:x.checked??null,monitoring_enabled:!!x.monitoring_enabled,monitoring_interval_hours:[6,12,24].includes(Number(x.monitoring_interval_hours))?Number(x.monitoring_interval_hours):24});
+const shape=x=>({id:x.id,url:x.url,name:x.name,target:Number(x.target),currency:x.currency,size:x.size||'',color:x.color||'',stock:!!x.stock,buy:!!x.buy,price:x.price??null,available:x.available??null,checked:x.checked??null,preview_price:x.preview_price??null,preview_checked:x.preview_checked??null,monitoring_enabled:!!x.monitoring_enabled,monitoring_interval_hours:[6,12,24].includes(Number(x.monitoring_interval_hours))?Number(x.monitoring_interval_hours):24});
 const toDb=x=>({...shape(x),user_id:user.id});
 const fromDb=x=>shape(x);
 const value=x=>JSON.stringify(shape(x));
@@ -146,4 +146,15 @@ window.pricepilotToggleMonitoring=async id=>{
  if(error)return notify('Could not update monitoring: '+error.message);
  item.monitoring_enabled=enabled;snapshot.set(id,value(item));window.pricepilotRefresh();
  notify(enabled?'Automatic checks enabled. The first check will run at a future scheduler cycle.':'Automatic checks paused.');
+};
+
+window.pricepilotFetchDetails=async rawUrl=>{
+ if(!user||!window.PricePilotCloudReady)throw Error('Sign in to retrieve product details. You may still enter them manually.');
+ let normalized;
+ try{normalized=new URL(rawUrl).href}catch{throw Error('Please enter a valid URL.')}
+ const {data,error}=await client.functions.invoke('pricepilot-preview',{body:{url:normalized}});
+ if(error){let detail='';try{detail=(await error.context?.json())?.error||''}catch{}throw Error(detail||error.message)}
+ if(!data?.success)throw Error(data?.error||'No usable product metadata found');
+ window.pricepilotApplyPreview?.({...data,url:rawUrl});
+ return data;
 };
