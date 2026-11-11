@@ -7,7 +7,7 @@ const button=$('#accountBtn'),modal=$('#accountOverlay'),form=$('#accountForm'),
 let user=null,snapshot=new Map(),queue=Promise.resolve(),syncTimer,loading=false;
 const info=s=>{message.textContent=s;message.hidden=!s};
 const notify=s=>typeof window.pricepilotToast==='function'?window.pricepilotToast(s):info(s);
-const shape=x=>({id:x.id,url:x.url,name:x.name,target:Number(x.target),currency:x.currency,size:x.size||'',color:x.color||'',stock:!!x.stock,buy:!!x.buy,price:x.price??null,available:x.available??null,checked:x.checked??null,preview_price:x.preview_price??null,preview_checked:x.preview_checked??null,monitoring_enabled:!!x.monitoring_enabled,monitoring_interval_hours:[6,12,24].includes(Number(x.monitoring_interval_hours))?Number(x.monitoring_interval_hours):24});
+const shape=x=>({id:x.id,url:x.url,name:x.name,target:Number(x.target),currency:x.currency,size:x.size||'',color:x.color||'',stock:!!x.stock,buy:!!x.buy,price:x.price??null,available:x.available??null,checked:x.checked??null,preview_price:x.preview_price??null,preview_checked:x.preview_checked??null,product_brand:x.product_brand??null,product_sku:x.product_sku??null,product_description:x.product_description??null,product_image_url:x.product_image_url??null,monitoring_enabled:!!x.monitoring_enabled,monitoring_interval_hours:[6,12,24].includes(Number(x.monitoring_interval_hours))?Number(x.monitoring_interval_hours):24});
 const toDb=x=>({...shape(x),user_id:user.id});
 const fromDb=x=>shape(x);
 const value=x=>JSON.stringify(shape(x));
