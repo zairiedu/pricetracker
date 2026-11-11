@@ -10,3 +10,8 @@ jobs:
           node-version: '22'
       - run: npm run check
       - run: node --check cloud.js
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test reusable product extractor
+        run: deno test supabase/functions/pricepilot-preview/parser.test.ts
