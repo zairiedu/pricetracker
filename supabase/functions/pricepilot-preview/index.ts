@@ -109,7 +109,7 @@ function parseProduct(html:string){
  return found;
 }
 Deno.serve(async request=>{
- if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'POST,OPTIONS','access-control-allow-headers':'authorization,apikey,content-type'}});
+ if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'POST,OPTIONS','access-control-allow-headers':'authorization,apikey,content-type,x-client-info,x-supabase-api-version'}});
  if(request.method!=='POST')return json({error:'Method not allowed'},405);
  if(request.headers.get('origin')&&request.headers.get('origin')!==ORIGIN)return json({error:'Origin not supported'},403);
  const token=request.headers.get('authorization')?.replace(/^Bearer\s+/i,'');
