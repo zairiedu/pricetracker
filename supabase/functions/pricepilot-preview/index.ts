@@ -95,18 +95,24 @@ function parseProduct(html:string, productUrl:string){
  }
  const expected=decodeURIComponent(new URL(productUrl).pathname.toLowerCase());
  const productId=expected.match(/(\d{7,12})p?\.html?$/)?.[1]||null;
+ const pageName=meta('og:title','twitter:title')||clean(root.querySelector('h1')?.text,160);
+ const words=(s:string)=>new Set(s.toLowerCase().replace(/[^a-z0-9]+/g,' ').split(' ').filter(w=>w.length>=3&&!['with','from','shop','tire','canadian','product'].includes(w)));
+ const pageWords=words(pageName||expected.replace(/-/g,' '));
  const productScore=(p:Record<string,unknown>)=>{
   const name=clean(p.name);if(!name)return -100;
   let score=1;
+  const matchWords=words(name);
+  const overlap=[...matchWords].filter(w=>pageWords.has(w)).length;
+  if(matchWords.size>=2&&pageWords.size>=2)score+=overlap/Math.max(2,matchWords.size)>=0.65?9:-6;
   const url=typeof p.url==='string'?p.url:null;
-  if(url){try{const u=new URL(url,productUrl);if(u.pathname.toLowerCase()===expected)score+=10;else if(u.hostname!==new URL(productUrl).hostname)score-=3}catch{}}
+  if(url){try{const u=new URL(url,productUrl);if(u.pathname.toLowerCase()===expected)score+=12;else if(u.hostname!==new URL(productUrl).hostname)score-=5}catch{}}
   const identifiers=[p.sku,p.productID,p.mpn].map(x=>String(x??'').replace(/\D/g,''));
-  if(productId&&identifiers.some(x=>x.includes(productId)))score+=8;
-  if(expected.split('/').some(segment=>segment.includes(name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,22))))score+=3;
+  if(productId&&identifiers.some(x=>x.includes(productId)))score+=10;
   return score;
  };
  products.sort((a,b)=>productScore(b)-productScore(a));
- const product=products[0]&&productScore(products[0])>0?products[0]:null;
+ // Multiple products may be recommendations or carousel cards; reject ambiguous matches.
+ const product=products[0]&&(products.length===1||productScore(products[0])>=5)?products[0]:null;
  const nameFromProduct=clean(product?.name);
  const title=clean(root.querySelector('title')?.text,200)?.replace(/\s+[|–-]\s+(Canadian Tire|Walmart|Sport Chek|Best Buy).*$/i,'');
  const name=nameFromProduct||meta('og:title','twitter:title')||title||clean(root.querySelector('h1')?.text);
