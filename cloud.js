@@ -153,7 +153,14 @@ window.pricepilotFetchDetails=async rawUrl=>{
  let normalized;
  try{normalized=new URL(rawUrl).href}catch{throw Error('Please enter a valid URL.')}
  const {data,error}=await client.functions.invoke('pricepilot-preview',{body:{url:normalized}});
- if(error){let detail='';try{detail=(await error.context?.json())?.error||''}catch{}throw Error(detail||error.message)}
+ if(error){
+  let detail='';
+  try{detail=(await error.context?.json())?.error||''}catch{}
+  if(!detail&&/Failed to send a request to the Edge Function/i.test(error.message||'')){
+   throw Error('Unable to reach the product lookup service. Refresh PricePilot and try again; if it persists, report the time and retailer.');
+  }
+  throw Error(detail||error.message||'Product lookup failed');
+ }
  if(!data?.success)throw Error(data?.error||'No usable product metadata found');
  window.pricepilotApplyPreview?.({...data,url:rawUrl});
  return data;
