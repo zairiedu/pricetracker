@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS trackers (id TEXT PRIMARY KEY,url TEXT NOT NULL,name TEXT NOT NULL,target REAL NOT NULL,currency TEXT NOT NULL,size TEXT NOT NULL,color TEXT NOT NULL,in_stock_only INTEGER NOT NULL DEFAULT 1,buy_intent INTEGER NOT NULL DEFAULT 0,email TEXT NOT NULL DEFAULT '',current_price REAL,available INTEGER,last_checked TEXT,last_error TEXT,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS price_history (id INTEGER PRIMARY KEY AUTOINCREMENT,tracker_id TEXT NOT NULL REFERENCES trackers(id) ON DELETE CASCADE,price REAL NOT NULL,checked_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT,tracker_id TEXT NOT NULL REFERENCES trackers(id) ON DELETE CASCADE,message TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_tracker_checks ON trackers(last_checked);
+CREATE INDEX IF NOT EXISTS idx_price_history ON price_history(tracker_id,checked_at);
