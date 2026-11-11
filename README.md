@@ -16,6 +16,21 @@ Sign in, open **Add tracker** (or edit an existing tracker), paste a supported p
 - The preview endpoint requires a signed-in account, restricts hosts and redirects, limits response size and execution time, and caps requests to 25 per account per 24 hours and one request per URL every five minutes.
 - For unsupported shops or pages that hide metadata, manual entry remains available. Auto-fill is best-effort, not a general-purpose web scraper.
 
+## Generic product extraction (November 2026)
+
+PricePilot now uses the pinned [node-html-parser](https://www.npmjs.com/package/node-html-parser) package in the Supabase `pricepilot-preview` Edge Function. It extracts product metadata using a reusable pipeline rather than hardcoded CSS selectors for each retailer:
+
+1. Schema.org JSON-LD `Product` and `Offer`, matched to the requested page by URL, product identifiers, and title; ambiguous product recommendations are ignored.
+2. Product-specific Open Graph or itemprop price/currency metadata when present.
+3. Open Graph/Twitter title and image, then the page title and main heading as a descriptive fallback.
+4. Brand, SKU, color, size, description, and image when the page provides them; unknown fields remain empty.
+
+The add/edit form shows a thumbnail and identifies the extraction source. Account watchlists persist optional `product_brand`, `product_sku`, `product_description`, and `product_image_url`. A page-listed price is **always an unverified preview**, not a trusted exact-variant observation or alert trigger.
+
+This is an incremental improvement, **not universal retailer coverage**. Sites that require browser JavaScript rendering or deny server-side access may still return partial metadata. The scalable fallback should use retailer-authorized APIs or a browser-rendering worker (such as Crawlee/Playwright), subject to retailer rules, quotas and costs. The installed `node-html-parser` package parses HTML but cannot execute JavaScript.
+
+Test target: `https://www.canadiantire.ca/en/pdp/horizon-fitness-7-0at-folding-treadmill-1840987p.html`. Canadian Tire's product page exposes a treadmill title and an advertised page price, but extraction from Supabase has not yet been validated with a signed-in customer JWT. Regional store prices and availability must never be guessed.
+
 ## What works
 
 - Calm sage/cream responsive dashboard, mobile bottom navigation, product watchlists, size/color/price rules.
