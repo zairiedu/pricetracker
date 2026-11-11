@@ -5,7 +5,7 @@ import { aiFallback, eligibleForAiFallback } from './agent.ts';
 const ORIGIN = 'https://zairiedu.github.io';
 const headers = {'content-type':'application/json','access-control-allow-origin':ORIGIN,'vary':'Origin','cache-control':'no-store'};
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
-const allowedHosts = new Set(['bestbuy.ca','www.bestbuy.ca','walmart.ca','www.walmart.ca','canadiantire.ca','www.canadiantire.ca','sportchek.ca','www.sportchek.ca']);
+const allowedHosts = new Set(['bestbuy.ca','www.bestbuy.ca','walmart.ca','www.walmart.ca','canadiantire.ca','www.canadiantire.ca','sportchek.ca','www.sportchek.ca','dsw.ca','www.dsw.ca']);
 function validRetailerUrl(raw:string):URL|null {
  try {
   const u=new URL(raw);
@@ -54,10 +54,10 @@ async function limitedHtml(url:string){
   const response=await fetch(url,{redirect:'manual',signal:controller.signal,headers:{'accept':'text/html','user-agent':'PricePilot/0.2 (price availability preview)'}});
   if(!response.ok)throw Error('Retailer declined request ('+response.status+')');
   if(!(response.headers.get('content-type')??'').toLowerCase().includes('text/html'))throw Error('Retailer returned non-HTML data');
-  if(Number(response.headers.get('content-length')||0)>1100000)throw Error('Retailer response too large');
+  if(Number(response.headers.get('content-length')||0)>2000000)throw Error('Retailer response too large');
   if(!response.body)throw Error('Empty response');
   const reader=response.body.getReader(),parts:Uint8Array[]=[];let total=0;
-  while(true){const {value,done}=await reader.read();if(done)break;total+=value.byteLength;if(total>1100000){await reader.cancel();throw Error('Retailer response too large')}parts.push(value)}
+  while(true){const {value,done}=await reader.read();if(done)break;total+=value.byteLength;if(total>2000000){await reader.cancel();throw Error('Retailer response too large')}parts.push(value)}
   const all=new Uint8Array(total);let offset=0;for(const part of parts){all.set(part,offset);offset+=part.byteLength}
   return new TextDecoder().decode(all);
  }finally{clearTimeout(timer)}
@@ -79,7 +79,7 @@ Deno.serve(async request=>{
  const raw=(body as {url?:unknown})?.url;
  if(typeof raw!=='string'||raw.length>2048)return json({error:'Product URL required'},400);
  const site=validRetailerUrl(raw);
- if(!site)return json({error:'Auto-fill currently supports select Canadian retailers (including Sport Chek). You can still enter details manually.'},422);
+ if(!site)return json({error:'Auto-fill currently supports selected Canadian retailers including DSW. You can still enter details manually.'},422);
 
  const db=createClient(endpoint,secret,{auth:{persistSession:false,autoRefreshToken:false}});
  // Identity and metadata are shared between users without exposing tracked products.
