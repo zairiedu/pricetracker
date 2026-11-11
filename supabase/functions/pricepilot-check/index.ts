@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 const ORIGIN = 'https://zairiedu.github.io';
 const headers = {'content-type':'application/json','access-control-allow-origin':ORIGIN,'vary':'Origin','cache-control':'no-store'};
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
-const allowedHosts = new Set(['bestbuy.ca','www.bestbuy.ca','walmart.ca','www.walmart.ca','canadiantire.ca','www.canadiantire.ca']);
+const allowedHosts = new Set(['bestbuy.ca','www.bestbuy.ca','walmart.ca','www.walmart.ca','canadiantire.ca','www.canadiantire.ca','sportchek.ca','www.sportchek.ca']);
 function validRetailerUrl(raw:string):URL|null {
  try {
   const u=new URL(raw);
@@ -79,7 +79,7 @@ Deno.serve(async request=>{
  if(readError)return json({error:'Could not retrieve tracker'},500);
  if(!tracker)return json({error:'Tracker not found'},404);
  const retailer=validRetailerUrl(tracker.url);
- if(!retailer)return json({error:'Retailer not yet supported for direct checks. Supported: Best Buy Canada, Walmart Canada, Canadian Tire.'},422);
+ if(!retailer)return json({error:'Retailer not yet supported for direct checks. Supported for experimental checks: Best Buy Canada, Walmart Canada, Canadian Tire and Sport Chek.'},422);
  const {data:previous}=await admin.from('pricepilot_price_observations').select('amount,available,observed_at').eq('tracker_id',tracker.id).order('observed_at',{ascending:false}).limit(1).maybeSingle();
  if(previous&&Date.now()-new Date(previous.observed_at).getTime()<15*60*1000)return json({error:'Recent observation already available; wait before checking again',latest:previous},429);
  const cutoff=new Date(Date.now()-86400000).toISOString();
