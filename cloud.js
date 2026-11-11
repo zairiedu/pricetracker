@@ -20,7 +20,7 @@ async function hydrate(u){
  const items=data.map(fromDb);snapshot=new Map(items.map(x=>[x.id,value(x)]));
  const [observations,notifications,grants]=await Promise.all([
   client.from('pricepilot_price_observations').select('tracker_id,amount,available,observed_at').order('observed_at',{ascending:false}).limit(500),
-  client.from('pricepilot_notifications').select('message,created_at').order('created_at',{ascending:false}).limit(50),
+  client.from('pricepilot_notifications').select('id,message,created_at,read_at').order('created_at',{ascending:false}).limit(50),
   client.from('pricepilot_entitlement_grants').select('grant_kind,quantity,grant_status,expires_at')
  ]);
  if(observations.error||notifications.error||grants.error)notify('Some account features could not be loaded.');
@@ -30,6 +30,7 @@ async function hydrate(u){
  let allowance=5,extra=0;
  for(const g of grants.data||[]){if(g.grant_status!=='active'||g.expires_at&&Date.parse(g.expires_at)<=Date.now())continue;if(g.grant_kind==='slot_allowance_total')allowance=Math.max(allowance,g.quantity);if(g.grant_kind==='bonus_slots')extra+=g.quantity}
  window.PricePilotCloudSlots=Math.min(500,allowance+extra);
+ window.PricePilotNotifications=notifications.data||[];
  const events=(notifications.data||[]).map(n=>({message:'Verified alert: '+n.message,date:n.created_at}));
  window.pricepilotSwitchData({items,events,settings:{api:'',token:'',email:''}});
  loading=false;window.PricePilotCloudReady=true;
@@ -39,7 +40,7 @@ async function authState(event,session){
  const next=session?.user||null;
  if(next?.id===user?.id)return;
  user=next;window.PricePilotCloudReady=false;clearTimeout(syncTimer);
- if(!user){window.PricePilotAccountKey=null;window.PricePilotCloudSlots=5;snapshot.clear();window.pricepilotSwitchData(guestData());setAccountButton();return}
+ if(!user){window.PricePilotNotifications=[];window.PricePilotAccountKey=null;window.PricePilotCloudSlots=5;snapshot.clear();window.pricepilotSwitchData(guestData());setAccountButton();return}
  setAccountButton();await hydrate(user);
 }
 client.auth.onAuthStateChange((event,session)=>{setTimeout(()=>authState(event,session),0)});
@@ -121,4 +122,12 @@ window.pricepilotCheckRetailer=async id=>{
   await hydrate(user);
   notify(data.matched?'Verified offer meets your rule! No purchase was placed.':'Verified retailer observation saved.');
  }catch(e){notify('Retailer check: '+e.message)}
+};
+
+window.pricepilotMarkRead=async id=>{
+ if(!user||!window.PricePilotCloudReady)return;
+ const {error}=await client.from('pricepilot_notifications').update({read_at:new Date().toISOString()}).eq('id',id).is('read_at',null);
+ if(error){notify('Cannot mark as read: '+error.message);return}
+ const note=(window.PricePilotNotifications||[]).find(x=>x.id===id);if(note)note.read_at=new Date().toISOString();
+ window.pricepilotRefresh();
 };
