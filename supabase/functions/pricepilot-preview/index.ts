@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.57.0';
 import { parseProduct } from './parser.ts';
+import { aiFallback, eligibleForAiFallback } from './agent.ts';
 
 const ORIGIN = 'https://zairiedu.github.io';
 const headers = {'content-type':'application/json','access-control-allow-origin':ORIGIN,'vary':'Origin','cache-control':'no-store'};
@@ -79,16 +80,74 @@ Deno.serve(async request=>{
  if(typeof raw!=='string'||raw.length>2048)return json({error:'Product URL required'},400);
  const site=validRetailerUrl(raw);
  if(!site)return json({error:'Auto-fill currently supports select Canadian retailers (including Sport Chek). You can still enter details manually.'},422);
+
  const db=createClient(endpoint,secret,{auth:{persistSession:false,autoRefreshToken:false}});
- const {count,error:countError}=await db.from('pricepilot_product_previews').select('id',{head:true,count:'exact'}).eq('user_id',user.id).gte('created_at',new Date(Date.now()-86400000).toISOString());
+ // Identity and metadata are shared between users without exposing tracked products.
+ // The cache contains only allowlisted public product-page attributes and must never
+ // be used as exact variant-verified price history.
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(site.href)))).map(x=>x.toString(16).padStart(2,'0')).join('');
+ const now=Date.now();
+ const {data:cache,error:cacheError}=await db.from('pricepilot_product_metadata_cache')
+   .select('extracted,extractor,fetched_at,expires_at').eq('url_hash',hash).maybeSingle();
+ if(!cacheError&&cache&&Date.parse(cache.expires_at)>now){
+  return json({success:true,...cache.extracted,source:cache.extracted.source||cache.extractor,
+   checkedAt:cache.fetched_at,cached:true,
+   warning:'Cached page preview, not exact-variant verified. Prices may change by store or region.'});
+ }
+ const {count,error:countError}=await db.from('pricepilot_product_previews')
+  .select('id',{head:true,count:'exact'}).eq('user_id',user.id).gte('created_at',new Date(now-86400000).toISOString());
  if(countError)return json({error:'Preview service unavailable'},503);
  if((count??0)>=25)return json({error:'Daily preview limit reached. Try again later.'},429);
- const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(site.href)))).map(x=>x.toString(16).padStart(2,'0')).join('');
- const {error:claimError}=await db.from('pricepilot_product_previews').insert({user_id:user.id,url_hash:hash,window_slot:Math.floor(Date.now()/300000)});
- if(claimError)return json({error:claimError.code==='23505'?'Wait five minutes before previewing this URL again.':'Preview unavailable'},claimError.code==='23505'?429:503);
+ const {error:claimError}=await db.from('pricepilot_product_previews').insert({
+  user_id:user.id,url_hash:hash,window_slot:Math.floor(now/300000)
+ });
+ if(claimError)return json({error:claimError.code==='23505'?'Wait five minutes before refreshing this URL.':'Preview unavailable'},claimError.code==='23505'?429:503);
  try{
-  const details=parseProduct(await limitedHtml(site.href),site.href);
-  if(!details.name&&!details.price)return json({error:'The retailer did not provide usable product metadata. Please fill the fields manually.'},422);
-  return json({success:true,...details,checkedAt:new Date().toISOString(),warning:'Price is a page preview, not a verified observation for the selected variant. Confirm size, color, price, and target before saving.'});
- }catch(e){return json({error:'Could not fetch retailer details: '+String((e as Error).message).slice(0,160)},422)}
+  const html=await limitedHtml(site.href);
+  let details=parseProduct(html,site.href);
+  let extractor='generic_html';
+  // A tiny agent is an optional fallback only, never an independent price authority.
+  if(eligibleForAiFallback(details)&&Deno.env.get('PRICEPILOT_AI_ENABLED')==='true'&&Deno.env.get('OPENAI_API_KEY')){
+   const day=new Date().toISOString().slice(0,10);
+   const [perUser,global]=await Promise.all([
+    db.from('pricepilot_ai_extraction_budget').select('id',{count:'exact',head:true}).eq('user_id',user.id).eq('budget_day',day),
+    db.from('pricepilot_ai_extraction_budget').select('id',{count:'exact',head:true}).eq('budget_day',day)
+   ]);
+   if(!perUser.error&&!global.error&&(perUser.count||0)<3&&(global.count||0)<40){
+    // Reserve an idempotent charge slot before calling a paid provider.
+    const {error:reserved}=await db.from('pricepilot_ai_extraction_budget').insert({
+     user_id:user.id,url_hash:hash,budget_day:day
+    });
+    if(!reserved){
+     const ai=await aiFallback(html,site.href);
+     if(ai){
+      const merged={...details};
+      for(const field of ['name','brand','description','size','color','sku','image'] as const){
+       if(!merged[field]&&ai[field])Object.assign(merged,{[field]:ai[field]});
+      }
+      details=merged;
+      extractor='ai_fallback';
+      details.source='ai_fallback_identity';
+     }
+    }
+   }
+  }
+  if(!details.name&&!details.price)return json({
+   error:'This retailer provided insufficient product metadata. Please complete the form manually.'
+  },422);
+  const ttlMs=details.price!==null?15*60*1000:24*60*60*1000;
+  // A cached price is just a short-lived informational page preview.
+  const fetchedAt=new Date().toISOString();
+  const {error:writeError}=await db.from('pricepilot_product_metadata_cache').upsert({
+   url_hash:hash,hostname:site.hostname,extracted:details,extractor,
+   fetched_at:fetchedAt,expires_at:new Date(now+ttlMs).toISOString()
+  },{onConflict:'url_hash'});
+  if(writeError)console.error('Preview cache write failure',writeError.code);
+  return json({success:true,...details,checkedAt:fetchedAt,cached:false,
+   agentEnabled:Deno.env.get('PRICEPILOT_AI_ENABLED')==='true'&&!!Deno.env.get('OPENAI_API_KEY'),
+   warning:'Page preview only. Confirm size, color and price. Verified alerts require separate retailer checks.'});
+ }catch(e){
+  return json({error:'Could not fetch retailer details: '+String((e as Error).message).slice(0,160)},422);
+ }
+
 });
