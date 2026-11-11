@@ -5,6 +5,18 @@ Mobile-first price tracking MVP with Supabase authentication, an opt-in hourly m
 **Live site:** https://zairiedu.github.io/pricetracker/  
 **Repo:** https://github.com/zairiedu/pricetracker
 
+## Retailer-independent product autofill (November 2026)
+
+**Product detail autofill now accepts any public HTTPS retailer hostname** (not a predefined store allowlist). Sign-in is required. PricePilot attempts generic JSON-LD/Open Graph/HTML parsing, optionally supplements missing identity information through a configured AI fallback, and caches page data. Examples of supported page structures include Canadian Tire, DSW, and Shopify/WooCommerce-style pages. These are **best-effort** previews, not guaranteed live product data.
+
+### Security and operational limits
+
+- Reject IP-literal, local/internal, metadata, dynamic-local-DNS, non-HTTPS, credentialed and nonstandard-port URLs. Check public DNS answers before fetching. Never follow redirects. Bound time and HTML response size.
+- DNS preflighting is defense in depth, not a DNS-pinned outbound connection. **DNS rebinding remains possible** in this edge implementation; before public scale, route arbitrary URL retrieval through a hardened egress proxy that validates the actual connected IP address.
+- Keep authentication and the 25 uncached product previews/day/user budget and 5-minute same-URL cooldown. Shared cache helps avoid repeated retailer requests.
+- Retailer blocks, bot challenges, JavaScript-only product pages, local-store pricing, missing currency, variant-specific pricing or a page refusing remote access can prevent successful extraction. Do not bypass access controls; use official retailer feeds/APIs or authorized browser rendering services if needed.
+- The broader arbitrary-host support applies only to **product details and unverified page-price previews**, **not** to automatic, verified price checks or purchasing. Scheduled monitoring stays restricted to its separately supported integrations.
+
 ## DSW Canada preview support
 
 DSW Canada (`dsw.ca` / `www.dsw.ca`) is allowed for **product metadata previews** from the authenticated `pricepilot-preview` function. The tested fixture URL is:
@@ -47,8 +59,8 @@ Sign in, open **Add tracker** (or edit an existing tracker), paste a supported p
 - A successfully verified exact-variant observation takes precedence and is labeled **Verified current price**.
 - A page-listed price from autofill is labeled **Page price preview** and saved separately in `preview_price`/`preview_checked`; this is **not** proof of the selected size/color's actual price and never triggers verified alerts.
 - A manually entered price is labeled **Manual price**. If no price is available, the current-price field is **Unknown**.
-- The preview endpoint requires a signed-in account, restricts hosts and redirects, limits response size and execution time, and caps requests to 25 per account per 24 hours and one request per URL every five minutes.
-- For unsupported shops or pages that hide metadata, manual entry remains available. Auto-fill is best-effort, not a general-purpose web scraper.
+- The preview endpoint requires a signed-in account, rejects nonpublic or unsafe hosts and redirects, limits response size and execution time, and caps requests to 25 per account per 24 hours and one request per URL every five minutes.
+- For inaccessible shops or pages that hide metadata, manual entry remains available. Auto-fill is best-effort, not a general-purpose web scraper.
 
 ## Generic product extraction (November 2026)
 
