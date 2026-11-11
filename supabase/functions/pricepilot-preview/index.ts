@@ -67,10 +67,14 @@ function clean(value:unknown,max=120):string|null {
  return s?s.slice(0,max):null;
 }
 function meta(html:string,key:string):string|null {
- const escaped=key.replace(/[.*+?^{}${}()|[\]\\]/g,'\\$&');
- const pattern=new RegExp('<meta\\s+[^>]*(?:property|name)\\s*=\\s*["\\\']'+escaped+'["\\\'][^>]*>','i');
- const tag=html.match(pattern)?.[0];
- return tag?clean(tag.match(/content\s*=\s*["']([^"']+)["']/i)?.[1],260):null;
+ const tags=html.match(/<meta\b[^>]*>/gi)||[];
+ for(const tag of tags){
+  const property=tag.match(/\b(?:property|name)\s*=\s*["']([^"']+)["']/i)?.[1];
+  if(property?.toLowerCase()!==key.toLowerCase())continue;
+  const content=tag.match(/\bcontent\s*=\s*["']([^"']+)["']/i)?.[1];
+  if(content)return clean(content,120);
+ }
+ return null;
 }
 function parseProduct(html:string){
  const found:{name:string|null,brand:string|null,size:string|null,color:string|null,price:number|null,currency:string|null,available:boolean|null}={name:null,brand:null,size:null,color:null,price:null,currency:null,available:null};
