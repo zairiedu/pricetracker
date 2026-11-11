@@ -5,7 +5,7 @@ import { aiFallback, eligibleForAiFallback } from './agent.ts';
 const ORIGIN = 'https://zairiedu.github.io';
 const headers = {'content-type':'application/json','access-control-allow-origin':ORIGIN,'vary':'Origin','cache-control':'no-store'};
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
-import { validateProductUrl } from './url-policy.ts';
+import { validateProductUrl, hasPublicDnsRecords } from './url-policy.ts';
 function extractOffer(html:string,requiredSize:string,requiredColor:string,currency:string){
  const scripts=[...html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
  for(const script of scripts){
@@ -96,6 +96,7 @@ Deno.serve(async request=>{
  });
  if(claimError)return json({error:claimError.code==='23505'?'Wait five minutes before refreshing this URL.':'Preview unavailable'},claimError.code==='23505'?429:503);
  try{
+  if(!(await hasPublicDnsRecords(site.hostname)))return json({error:'Could not safely resolve this retailer hostname. Please enter product details manually.'},422);
   const html=await limitedHtml(site.href);
   let details=parseProduct(html,site.href);
   let extractor='generic_html';
