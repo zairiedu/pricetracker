@@ -1,0 +1,13 @@
+name = "pricepilot-api"
+main = "index.js"
+compatibility_date = "2026-11-01"
+[triggers]
+crons = ["*/30 * * * *"]
+[[d1_databases]]
+binding = "DB"
+database_name = "pricepilot"
+database_id = "REPLACE_WITH_D1_ID"
+[vars]
+ALLOWED_ORIGIN = "https://zairiedu.github.io"
+# Set API_TOKEN / RESEND_API_KEY with wrangler secret put.
+# Set ALERT_FROM to a verified sender to enable email.
