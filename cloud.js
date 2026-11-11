@@ -18,15 +18,28 @@ async function hydrate(u){
  const {data,error}=await client.from('pricepilot_trackers').select('*').order('created_at',{ascending:false});
  if(error){loading=false;window.pricepilotSwitchData({items:[],events:[],settings:{api:'',token:'',email:''}});$('#cloudState').textContent='● Cloud unavailable';notify('Could not load cloud watchlist: '+error.message);return}
  const items=data.map(fromDb);snapshot=new Map(items.map(x=>[x.id,value(x)]));
- window.pricepilotSwitchData({items,events:[],settings:{api:'',token:'',email:''}});
+ const [observations,notifications,grants]=await Promise.all([
+  client.from('pricepilot_price_observations').select('tracker_id,amount,available,observed_at').order('observed_at',{ascending:false}).limit(500),
+  client.from('pricepilot_notifications').select('message,created_at').order('created_at',{ascending:false}).limit(50),
+  client.from('pricepilot_entitlement_grants').select('grant_kind,quantity,grant_status,expires_at')
+ ]);
+ if(observations.error||notifications.error||grants.error)notify('Some account features could not be loaded.');
+ const latest=new Map();
+ for(const o of observations.data||[])if(!latest.has(o.tracker_id))latest.set(o.tracker_id,o);
+ for(const item of items){const o=latest.get(item.id);if(o){item.verifiedPrice=Number(o.amount);item.verifiedAvailable=o.available;item.verifiedChecked=o.observed_at}}
+ let allowance=5,extra=0;
+ for(const g of grants.data||[]){if(g.grant_status!=='active'||g.expires_at&&Date.parse(g.expires_at)<=Date.now())continue;if(g.grant_kind==='slot_allowance_total')allowance=Math.max(allowance,g.quantity);if(g.grant_kind==='bonus_slots')extra+=g.quantity}
+ window.PricePilotCloudSlots=Math.min(500,allowance+extra);
+ const events=(notifications.data||[]).map(n=>({message:'Verified alert: '+n.message,date:n.created_at}));
+ window.pricepilotSwitchData({items,events,settings:{api:'',token:'',email:''}});
  loading=false;window.PricePilotCloudReady=true;
- setAccountButton();notify('Signed in. Your watchlist is saved in Supabase.');
+ setAccountButton();window.pricepilotRefresh();notify('Cloud account ready. Tracking allowance: '+window.PricePilotCloudSlots+' slots.');
 }
 async function authState(event,session){
  const next=session?.user||null;
  if(next?.id===user?.id)return;
  user=next;window.PricePilotCloudReady=false;clearTimeout(syncTimer);
- if(!user){window.PricePilotAccountKey=null;snapshot.clear();window.pricepilotSwitchData(guestData());setAccountButton();return}
+ if(!user){window.PricePilotAccountKey=null;window.PricePilotCloudSlots=5;snapshot.clear();window.pricepilotSwitchData(guestData());setAccountButton();return}
  setAccountButton();await hydrate(user);
 }
 client.auth.onAuthStateChange((event,session)=>{setTimeout(()=>authState(event,session),0)});
@@ -68,7 +81,7 @@ $('#accountSignOut').addEventListener('click',async()=>{await flush();const {err
 $('#accountImport').addEventListener('click',async()=>{
  if(!user)return;
  const guest=guestData().items||[],current=window.pricepilotState().items;
- const selected=guest.filter(x=>!current.some(y=>y.url===x.url&&y.size===x.size&&y.color===x.color)).slice(0,Math.max(0,5-current.length));
+ const selected=guest.filter(x=>!current.some(y=>y.url===x.url&&y.size===x.size&&y.color===x.color)).slice(0,Math.max(0,(window.PricePilotCloudSlots||5)-current.length));
  if(!selected.length)return info('No guest trackers available, or your free-plan limit is reached.');
  if(!confirm('Import '+selected.length+' guest tracker(s) into this account? Guest copies will remain on this device.'))return;
  for(const x of selected){
@@ -77,3 +90,35 @@ $('#accountImport').addEventListener('click',async()=>{
  }
  await hydrate(user);info('Guest trackers imported.');modal.classList.add('hidden');
 });
+
+const historyModal=$('#historyOverlay'),historyBody=$('#historyBody');
+$('#historyClose').addEventListener('click',()=>historyModal.classList.add('hidden'));
+historyModal.addEventListener('click',e=>{if(e.target===historyModal)historyModal.classList.add('hidden')});
+window.pricepilotHistory=async id=>{
+ if(!user)return notify('Sign in to view verified history.');
+ const item=window.pricepilotState().items.find(x=>x.id===id);
+ if(!item)return;
+ $('#historyTitle').textContent='Verified history · '+item.name;
+ historyBody.textContent='Loading verified price observations…';
+ historyModal.classList.remove('hidden');
+ const {data,error}=await client.from('pricepilot_price_observations').select('amount,currency,available,observed_at').eq('tracker_id',id).order('observed_at',{ascending:false}).limit(100);
+ if(error){historyBody.textContent='Could not read history: '+error.message;return}
+ if(!data?.length){historyBody.textContent='No verified retailer checks yet. Try “Check retailer” for an eligible product.';return}
+ const table=document.createElement('table');
+ const head=document.createElement('tr');for(const title of ['Observed','Price','Availability']){let th=document.createElement('th');th.textContent=title;head.append(th)}table.append(head);
+ for(const p of data){let tr=document.createElement('tr');for(const value of [new Date(p.observed_at).toLocaleString(),new Intl.NumberFormat('en-CA',{style:'currency',currency:p.currency}).format(Number(p.amount)),p.available===true?'In stock':p.available===false?'Out of stock':'Unknown']){const td=document.createElement('td');td.textContent=value;tr.append(td)}table.append(tr)}
+ historyBody.replaceChildren(table);
+};
+window.pricepilotCheckRetailer=async id=>{
+ if(!user||!window.PricePilotCloudReady)return notify('Sign in to check retailer prices.');
+ const item=window.pricepilotState().items.find(x=>x.id===id);if(!item)return;
+ await flush();
+ notify('Checking public retailer metadata for '+item.name+'…');
+ try{
+  const {data,error}=await client.functions.invoke('pricepilot-check',{body:{trackerId:id}});
+  if(error){let detail='';try{detail=(await error.context?.json())?.error||''}catch{}throw Error(detail||error.message)}
+  if(!data?.success)throw Error(data?.error||'No price result');
+  await hydrate(user);
+  notify(data.matched?'Verified offer meets your rule! No purchase was placed.':'Verified retailer observation saved.');
+ }catch(e){notify('Retailer check: '+e.message)}
+};
