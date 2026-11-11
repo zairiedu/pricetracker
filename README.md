@@ -5,6 +5,17 @@ Mobile-first price tracking MVP with Supabase authentication, an opt-in hourly m
 **Live site:** https://zairiedu.github.io/pricetracker/  
 **Repo:** https://github.com/zairiedu/pricetracker
 
+## Product URL autofill and current price (November 2026)
+
+Sign in, open **Add tracker** (or edit an existing tracker), paste a supported product URL and click **Fetch product details**. The authenticated `pricepilot-preview` Edge Function extracts available JSON-LD product details (or a page title fallback) from an allowlisted retailer. The form suggests product name, currency, size, and color when available; you can correct them before saving. The **target price is never decided for you**.
+
+- Product cards and the watchlist show **Current price** and **Target price** separately.
+- A successfully verified exact-variant observation takes precedence and is labeled **Verified current price**.
+- A page-listed price from autofill is labeled **Page price preview** and saved separately in `preview_price`/`preview_checked`; this is **not** proof of the selected size/color's actual price and never triggers verified alerts.
+- A manually entered price is labeled **Manual price**. If no price is available, the current-price field is **Unknown**.
+- The preview endpoint requires a signed-in account, restricts hosts and redirects, limits response size and execution time, and caps requests to 25 per account per 24 hours and one request per URL every five minutes.
+- For unsupported shops or pages that hide metadata, manual entry remains available. Auto-fill is best-effort, not a general-purpose web scraper.
+
 ## What works
 
 - Calm sage/cream responsive dashboard, mobile bottom navigation, product watchlists, size/color/price rules.
