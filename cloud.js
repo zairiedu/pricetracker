@@ -16,7 +16,7 @@ function guestData(){try{return JSON.parse(localStorage.getItem('pricepilot-v1')
 async function hydrate(u){
  loading=true;window.PricePilotCloudReady=false;window.PricePilotAccountKey='pricepilot-user-'+u.id;
  const {data,error}=await client.from('pricepilot_trackers').select('*').order('created_at',{ascending:false});
- if(error){loading=false;notify('Could not load cloud watchlist: '+error.message);return}
+ if(error){loading=false;window.pricepilotSwitchData({items:[],events:[],settings:{api:'',token:'',email:''}});$('#cloudState').textContent='● Cloud unavailable';notify('Could not load cloud watchlist: '+error.message);return}
  const items=data.map(fromDb);snapshot=new Map(items.map(x=>[x.id,value(x)]));
  window.pricepilotSwitchData({items,events:[],settings:{api:'',token:'',email:''}});
  loading=false;window.PricePilotCloudReady=true;
@@ -46,7 +46,7 @@ async function flush(){
    const {error}=await client.from('pricepilot_trackers').upsert({...item,user_id:uid},{onConflict:'id'});
    if(error)throw error;snapshot.set(item.id,value(item));
   }
- }).catch(e=>{notify('Cloud sync failed: '+e.message);console.error('PricePilot cloud sync',e)});
+ }).then(()=>{if(user?.id===uid)$('#cloudState').textContent='● Cloud synchronized'}).catch(e=>{$('#cloudState').textContent='● Sync failed';notify('Cloud sync failed: '+e.message);console.error('PricePilot cloud sync',e)});
  await queue;
 }
 document.addEventListener('pricepilot:data',()=>{if(!user||loading)return;clearTimeout(syncTimer);syncTimer=setTimeout(flush,500)});
