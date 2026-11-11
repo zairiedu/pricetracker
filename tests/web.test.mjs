@@ -42,3 +42,13 @@ test('Supabase Edge Functions accept browser client CORS preflight headers',()=>
   assert.match(edge,/access-control-allow-headers[^\n]*authorization/);
  }
 });
+
+test('product parser uses reusable HTML library and page-identity checks',()=>{
+ const edge=readFileSync(new URL('../supabase/functions/pricepilot-preview/index.ts',import.meta.url),'utf8');
+ assert.match(edge,/node-html-parser@9\.0\.7/);
+ assert.match(edge,/function parseProduct\(html:string, productUrl:string\)/);
+ assert.match(edge,/productScore/);
+ assert.match(edge,/products\.length===1\|\|productScore/);
+ for(const field of ['description','sku','image','brand','currency','priceVerified:false'])assert.ok(edge.includes(field),field);
+ assert.match(edge,/Page preview only/);
+});
