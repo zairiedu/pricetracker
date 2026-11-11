@@ -7,7 +7,7 @@ const button=$('#accountBtn'),modal=$('#accountOverlay'),form=$('#accountForm'),
 let user=null,snapshot=new Map(),queue=Promise.resolve(),syncTimer,loading=false;
 const info=s=>{message.textContent=s;message.hidden=!s};
 const notify=s=>typeof window.pricepilotToast==='function'?window.pricepilotToast(s):info(s);
-const shape=x=>({id:x.id,url:x.url,name:x.name,target:Number(x.target),currency:x.currency,size:x.size||'',color:x.color||'',stock:!!x.stock,buy:!!x.buy,price:x.price??null,available:x.available??null,checked:x.checked??null});
+const shape=x=>({id:x.id,url:x.url,name:x.name,target:Number(x.target),currency:x.currency,size:x.size||'',color:x.color||'',stock:!!x.stock,buy:!!x.buy,price:x.price??null,available:x.available??null,checked:x.checked??null,monitoring_enabled:!!x.monitoring_enabled,monitoring_interval_hours:[6,12,24].includes(Number(x.monitoring_interval_hours))?Number(x.monitoring_interval_hours):24});
 const toDb=x=>({...shape(x),user_id:user.id});
 const fromDb=x=>shape(x);
 const value=x=>JSON.stringify(shape(x));
@@ -18,15 +18,18 @@ async function hydrate(u){
  const {data,error}=await client.from('pricepilot_trackers').select('*').order('created_at',{ascending:false});
  if(error){loading=false;window.pricepilotSwitchData({items:[],events:[],settings:{api:'',token:'',email:''}});$('#cloudState').textContent='● Cloud unavailable';notify('Could not load cloud watchlist: '+error.message);return}
  const items=data.map(fromDb);snapshot=new Map(items.map(x=>[x.id,value(x)]));
- const [observations,notifications,grants]=await Promise.all([
+ const [observations,notifications,grants,monitorResults]=await Promise.all([
   client.from('pricepilot_price_observations').select('tracker_id,amount,available,observed_at').order('observed_at',{ascending:false}).limit(500),
   client.from('pricepilot_notifications').select('id,message,created_at,read_at').order('created_at',{ascending:false}).limit(50),
-  client.from('pricepilot_entitlement_grants').select('grant_kind,quantity,grant_status,expires_at')
+  client.from('pricepilot_entitlement_grants').select('grant_kind,quantity,grant_status,expires_at'),
+  client.from('pricepilot_monitor_results').select('tracker_id,status,details,checked_at').order('checked_at',{ascending:false}).limit(500)
  ]);
- if(observations.error||notifications.error||grants.error)notify('Some account features could not be loaded.');
+ if(observations.error||notifications.error||grants.error||monitorResults.error)notify('Some account features could not be loaded.');
+ const recentRuns=new Map();
+ for(const run of monitorResults.data||[])if(!recentRuns.has(run.tracker_id))recentRuns.set(run.tracker_id,run);
  const latest=new Map();
  for(const o of observations.data||[])if(!latest.has(o.tracker_id))latest.set(o.tracker_id,o);
- for(const item of items){const o=latest.get(item.id);if(o){item.verifiedPrice=Number(o.amount);item.verifiedAvailable=o.available;item.verifiedChecked=o.observed_at}}
+ for(const item of items){const o=latest.get(item.id);if(o){item.verifiedPrice=Number(o.amount);item.verifiedAvailable=o.available;item.verifiedChecked=o.observed_at}const r=recentRuns.get(item.id);if(r){item.monitorStatus=r.status;item.monitorDetails=r.details;item.monitorChecked=r.checked_at}}
  let allowance=5,extra=0;
  for(const g of grants.data||[]){if(g.grant_status!=='active'||g.expires_at&&Date.parse(g.expires_at)<=Date.now())continue;if(g.grant_kind==='slot_allowance_total')allowance=Math.max(allowance,g.quantity);if(g.grant_kind==='bonus_slots')extra+=g.quantity}
  window.PricePilotCloudSlots=Math.min(500,allowance+extra);
@@ -130,4 +133,17 @@ window.pricepilotMarkRead=async id=>{
  if(error){notify('Cannot mark as read: '+error.message);return}
  const note=(window.PricePilotNotifications||[]).find(x=>x.id===id);if(note)note.read_at=new Date().toISOString();
  window.pricepilotRefresh();
+};
+
+window.pricepilotToggleMonitoring=async id=>{
+ if(!user||!window.PricePilotCloudReady)return notify('Sign in to manage automatic checks.');
+ const item=window.pricepilotState().items.find(t=>t.id===id);
+ if(!item)return;
+ const enabled=!item.monitoring_enabled;
+ if(enabled&&!confirm('Enable automatic retailer checks for this product? PricePilot will request public product data approximately every '+(item.monitoring_interval_hours||24)+' hours where permitted; unsupported or blocked results remain unverified. No purchases or marketing emails will be sent.'))return;
+ await flush();
+ const {error}=await client.from('pricepilot_trackers').update({monitoring_enabled:enabled}).eq('id',id);
+ if(error)return notify('Could not update monitoring: '+error.message);
+ item.monitoring_enabled=enabled;snapshot.set(id,value(item));window.pricepilotRefresh();
+ notify(enabled?'Automatic checks enabled. The first check will run at a future scheduler cycle.':'Automatic checks paused.');
 };
