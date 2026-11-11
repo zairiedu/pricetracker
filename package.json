@@ -1,0 +1,13 @@
+{
+  "name": "pricepilot",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check worker/index.js && node --check packages/rules/marketing.mjs && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
