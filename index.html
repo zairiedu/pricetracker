@@ -92,7 +92,7 @@ return '<div class="product"><div class="art">◇</div><div class="product-inner
 }
 window.pricepilotApplyPreview=function(result){
  if(result.url!==$('#url').value.trim())return;
- draftPreview=result;
+ draftPreview={...result,url:new URL(result.url).href};
  if(result.name&&!$('#name').value.trim())$('#name').value=result.name;
  if(result.currency&&['CAD','USD','EUR','GBP'].includes(result.currency))$('#currency').value=result.currency;
  if(result.size&&!$('#size').value.trim())$('#size').value=result.size;
