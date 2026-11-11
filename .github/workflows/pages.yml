@@ -2,6 +2,10 @@ name: Deploy PricePilot
 on:
   push:
     branches: [main]
+    paths:
+      - index.html
+      - cloud.js
+      - .github/workflows/pages.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,8 +25,13 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Prepare public site only
+        run: |
+          mkdir -p dist
+          cp index.html cloud.js dist/
+          touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
