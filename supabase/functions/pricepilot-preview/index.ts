@@ -5,14 +5,7 @@ import { aiFallback, eligibleForAiFallback } from './agent.ts';
 const ORIGIN = 'https://zairiedu.github.io';
 const headers = {'content-type':'application/json','access-control-allow-origin':ORIGIN,'vary':'Origin','cache-control':'no-store'};
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers});
-const allowedHosts = new Set(['bestbuy.ca','www.bestbuy.ca','walmart.ca','www.walmart.ca','canadiantire.ca','www.canadiantire.ca','sportchek.ca','www.sportchek.ca','dsw.ca','www.dsw.ca']);
-function validRetailerUrl(raw:string):URL|null {
- try {
-  const u=new URL(raw);
-  if(u.protocol!=='https:'||u.username||u.password||u.port||!allowedHosts.has(u.hostname.toLowerCase()))return null;
-  return u;
- }catch{return null}
-}
+import { validateProductUrl } from './url-policy.ts';
 function extractOffer(html:string,requiredSize:string,requiredColor:string,currency:string){
  const scripts=[...html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
  for(const script of scripts){
@@ -78,12 +71,12 @@ Deno.serve(async request=>{
  let body:unknown;try{body=await request.json()}catch{return json({error:'Invalid request'},400)}
  const raw=(body as {url?:unknown})?.url;
  if(typeof raw!=='string'||raw.length>2048)return json({error:'Product URL required'},400);
- const site=validRetailerUrl(raw);
- if(!site)return json({error:'Auto-fill currently supports selected Canadian retailers including DSW. You can still enter details manually.'},422);
+ const site=validateProductUrl(raw);
+ if(!site)return json({error:'Provide a public HTTPS product page URL. Internal addresses, nonstandard ports and private-network targets are not allowed.'},422);
 
  const db=createClient(endpoint,secret,{auth:{persistSession:false,autoRefreshToken:false}});
  // Identity and metadata are shared between users without exposing tracked products.
- // The cache contains only allowlisted public product-page attributes and must never
+ // The cache contains only public product-page attributes and must never
  // be used as exact variant-verified price history.
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(site.href)))).map(x=>x.toString(16).padStart(2,'0')).join('');
  const now=Date.now();
