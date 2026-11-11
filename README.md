@@ -5,6 +5,16 @@ Mobile-first price tracking MVP with Supabase authentication, an opt-in hourly m
 **Live site:** https://zairiedu.github.io/pricetracker/  
 **Repo:** https://github.com/zairiedu/pricetracker
 
+## DSW Canada preview support
+
+DSW Canada (`dsw.ca` / `www.dsw.ca`) is allowed for **product metadata previews** from the authenticated `pricepilot-preview` function. The tested fixture URL is:
+
+`https://www.dsw.ca/product/elements-youth-boys-waterproof-tech-winter-boot/863101507?activeColor=120`
+
+The published DSW page identifies an Elements Youth Boy's Waterproof Tech Winter Boot, item 863101507, black, with a displayed $59.97 CAD clearance price when checked on November 11, 2026. Stock cannot be confirmed without selecting a shoe size. An automated Deno fixture verifies correct product selection, price/currency only when included in structured data, and no contamination by recommended products.
+
+**Important:** DSW is **not yet enabled for verified background price monitoring**. PricePilot's preview service may report no price if DSW's server-side HTML lacks consistent structured data. Page prices remain unverified until exact size, color and availability can be independently confirmed. The app has not yet completed an authenticated live extraction test for this DSW URL.
+
 ## Product Intelligence Agent (hybrid extractor)
 
 The live `pricepilot-preview` Supabase Edge Function uses **generic HTML parsing first**, followed by a small AI fallback **only if explicitly enabled**. It never trusts AI-generated prices or stock as verified evidence.
