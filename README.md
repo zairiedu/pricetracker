@@ -5,6 +5,30 @@ Mobile-first price tracking MVP with Supabase authentication, an opt-in hourly m
 **Live site:** https://zairiedu.github.io/pricetracker/  
 **Repo:** https://github.com/zairiedu/pricetracker
 
+## Product Intelligence Agent (hybrid extractor)
+
+The live `pricepilot-preview` Supabase Edge Function uses **generic HTML parsing first**, followed by a small AI fallback **only if explicitly enabled**. It never trusts AI-generated prices or stock as verified evidence.
+
+1. Parse JSON-LD Product/Offer, Open Graph metadata, product image, SKU, brand, size and color with `node-html-parser`.
+2. For matching allowlisted URLs, reuse a protected shared cache: 15 minutes for page-price previews, 24 hours for metadata-only results.
+3. If meaningful product identity is still missing, optionally use `supabase/functions/pricepilot-preview/agent.ts`, which sends bounded untrusted page text to a hosted OpenAI model using Structured Outputs. Only identity fields (name, brand, description, size, color, SKU, image) can be supplemented. Prices, checkout and verified alerts are **not** AI-derived.
+4. Budget safeguards reserve at most **3 AI calls per user per UTC day**, **40 overall per day**, and **1 per URL/user/day**. Standard requests remain limited to 25 uncached previews per user per rolling day, with a 5-minute URL cooldown.
+5. Output includes provenance and cached status. The page price remains labeled **Page price preview**, not verified current price.
+
+### AI fallback configuration
+
+**Default:** disabled, with zero AI API charges. To enable later, set private Edge Function secrets in Supabase (never in GitHub or the browser):
+
+```text
+PRICEPILOT_AI_ENABLED=true
+OPENAI_API_KEY=<private API key>
+PRICEPILOT_AI_MODEL=gpt-4o-mini
+```
+
+Only enable after selecting a funded API account with an explicit spending ceiling. The Supabase function calls the OpenAI Responses API using `store: false`. OpenAI API billing is separate from ChatGPT subscriptions. The model does not browse the web; it receives limited text already retrieved from an allowlisted retailer page.
+
+**Limits:** No generic scraper or agent can guarantee prices from JavaScript-only or access-restricted retailers. It never bypasses retailer blocks, invents currencies, or creates confirmed price observations when the requested variant is unclear. The supplied Canadian Tire treadmill is covered by representative automated extraction fixtures, but real live-store extraction still needs to be tested with an authenticated user.
+
 ## Product URL autofill and current price (November 2026)
 
 Sign in, open **Add tracker** (or edit an existing tracker), paste a supported product URL and click **Fetch product details**. The authenticated `pricepilot-preview` Edge Function extracts available JSON-LD product details (or a page title fallback) from an allowlisted retailer. The form suggests product name, currency, size, and color when available; you can correct them before saving. The **target price is never decided for you**.
@@ -85,6 +109,8 @@ Migration snapshots in `database/supabase/`:
 4. `004_cross_table_ownership.sql`
 5. `005_automatic_monitoring.sql`
 6. `006_performance_indexes.sql`
+7. `007_product_autofill.sql`
+8. `008_product_intelligence_agent.sql`
 
 These have been applied to the current Supabase project. Some snapshots are intended as **one-time new-environment migrations**, not scripts to rerun in production. Project Vault's `pricepilot_sweep_public_key` is configured separately from the random scheduler credential. Avoid committing secret key values. A proper Supabase migration-history reconciliation and local staging flow remain future work.
 
