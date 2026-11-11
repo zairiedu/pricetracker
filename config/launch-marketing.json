@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "currency": "CAD",
+  "plans": [
+    {
+      "id": "free",
+      "name": "Free",
+      "monthlyPriceMinor": 0,
+      "activeTrackingSlots": 5,
+      "monitoringIntervalMinutes": 720
+    },
+    {
+      "id": "plus",
+      "name": "Plus",
+      "monthlyPriceMinor": 499,
+      "activeTrackingSlots": 50,
+      "monitoringIntervalMinutes": 120
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "monthlyPriceMinor": 999,
+      "activeTrackingSlots": 250,
+      "monitoringIntervalMinutes": 30
+    }
+  ],
+  "campaigns": [
+    {
+      "id": "welcome-20",
+      "kind": "welcome",
+      "status": "draft",
+      "eligibility": {
+        "verifiedAccount": true,
+        "newAccountsOnly": true
+      },
+      "reward": {
+        "type": "slot_allowance_total",
+        "quantity": 20,
+        "expiresAfterDays": 30
+      },
+      "limits": {
+        "perAccount": 1,
+        "maxTotalRedemptions": 1000
+      },
+      "stacking": "max_allowance"
+    },
+    {
+      "id": "refer-20",
+      "kind": "referral",
+      "status": "draft",
+      "qualification": {
+        "verifiedAccount": true,
+        "firstRealTracker": true,
+        "minimumActiveDays": 7
+      },
+      "reward": {
+        "type": "bonus_slots",
+        "quantity": 20,
+        "expiresAfterDays": 90
+      },
+      "limits": {
+        "perReferrer": 10,
+        "maxTotalRedemptions": 2000
+      },
+      "stacking": "additive"
+    }
+  ]
+}
