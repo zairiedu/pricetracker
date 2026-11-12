@@ -1,5 +1,22 @@
 # PricePilot
 
+## Crawl4AI browser-rendering fallback (November 2026)
+
+An optional **open-source Crawl4AI** browser worker is now integrated into the
+deployed `pricepilot-preview` Supabase Edge Function (v10). Direct HTML/JSON-LD
+parsing remains the default. When direct retrieval fails or provides no page
+price/name, the function can request rendered HTML from the private worker, then
+parse the result with the existing shared parser. This avoids using AI to invent
+price or stock data and preserves the same preview-rate limits.
+
+Code and deployment instructions: [services/product-renderer](services/product-renderer/README.md).
+To activate, deploy the Docker worker with private HTTPS access and filtered
+network egress, then configure the private Supabase secrets
+`PRICEPILOT_RENDERER_URL` and `PRICEPILOT_RENDERER_TOKEN`.
+**The fallback is not active until that service is hosted and those secrets
+are configured.** No extra hosting has been purchased or provisioned. The
+existing extraction flow remains active and available.
+
 Mobile-first price tracking MVP with Supabase authentication, an opt-in hourly monitoring scheduler, and configurable marketing foundations.
 
 **Live site:** https://zairiedu.github.io/pricetracker/  
