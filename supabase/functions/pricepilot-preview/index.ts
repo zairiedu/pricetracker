@@ -57,6 +57,34 @@ async function limitedHtml(url:string){
 }
 
 
+
+/** Optional self-hosted Crawl4AI renderer. URL is configured server-side, never by the client. */
+async function renderedHtml(productUrl:string):Promise<string|null>{
+ const endpoint=Deno.env.get('PRICEPILOT_RENDERER_URL');
+ const token=Deno.env.get('PRICEPILOT_RENDERER_TOKEN');
+ if(!endpoint||!token)return null;
+ let target:URL;
+ try{target=new URL(endpoint);if(target.protocol!=='https:'||target.username||target.password)return null}
+ catch{return null}
+ const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),27000);
+ try{
+  const response=await fetch(target.href,{method:'POST',redirect:'manual',signal:controller.signal,
+   headers:{'authorization':'Bearer '+token,'content-type':'application/json'},
+   body:JSON.stringify({url:productUrl})});
+  if(!response.ok||response.status>=300)return null;
+  if(Number(response.headers.get('content-length')||0)>2000000)return null;
+  const reader=response.body?.getReader();if(!reader)return null;
+  const parts:Uint8Array[]=[];let bytes=0;
+  while(true){const {value,done}=await reader.read();if(done)break;
+   bytes+=value.byteLength;if(bytes>2000000){await reader.cancel();return null}parts.push(value)}
+  const all=new Uint8Array(bytes);let offset=0;
+  for(const part of parts){all.set(part,offset);offset+=part.byteLength}
+  const data=JSON.parse(new TextDecoder().decode(all));
+  return typeof data.html==='string'&&data.html.length>0&&data.html.length<=1800000?data.html:null;
+ }catch(e){console.warn('Renderer unavailable',String(e).slice(0,100));return null}
+ finally{clearTimeout(timer)}
+}
+
 Deno.serve(async request=>{
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{...headers,'access-control-allow-methods':'POST,OPTIONS','access-control-allow-headers':'authorization,apikey,content-type,x-client-info,x-supabase-api-version'}});
  if(request.method!=='POST')return json({error:'Method not allowed'},405);
@@ -97,9 +125,27 @@ Deno.serve(async request=>{
  if(claimError)return json({error:claimError.code==='23505'?'Wait five minutes before refreshing this URL.':'Preview unavailable'},claimError.code==='23505'?429:503);
  try{
   if(!(await hasPublicDnsRecords(site.hostname)))return json({error:'Could not safely resolve this retailer hostname. Please enter product details manually.'},422);
-  const html=await limitedHtml(site.href);
-  let details=parseProduct(html,site.href);
+  let html:string|null=null;
+  let directError:Error|null=null;
+  try{html=await limitedHtml(site.href)}
+  catch(error){directError=error as Error}
+  let details=html?parseProduct(html,site.href):null;
   let extractor='generic_html';
+  // Browser rendering is an optional fallback, never required for ordinary extraction.
+  // Do not send these results to verified price history or alerting.
+  if(!details?.name||details.price===null){
+   const rendered=await renderedHtml(site.href);
+   if(rendered){
+    const candidate=parseProduct(rendered,site.href);
+    if(!details||(!details.name&&candidate.name)||(!details.price&&candidate.price!==null)){
+     details=candidate;html=rendered;extractor='crawl4ai_rendered';
+     details.source='rendered_'+details.source;
+    }
+   }
+  }
+  if(!details){
+   return json({error:'Could not fetch retailer details: '+(directError?.message||'No usable HTML')},422);
+  }
   // A tiny agent is an optional fallback only, never an independent price authority.
   if(eligibleForAiFallback(details)&&Deno.env.get('PRICEPILOT_AI_ENABLED')==='true'&&Deno.env.get('OPENAI_API_KEY')){
    const day=new Date().toISOString().slice(0,10);
@@ -113,7 +159,7 @@ Deno.serve(async request=>{
      user_id:user.id,url_hash:hash,budget_day:day
     });
     if(!reserved){
-     const ai=await aiFallback(html,site.href);
+     const ai=html?await aiFallback(html,site.href):null;
      if(ai){
       const merged={...details};
       for(const field of ['name','brand','description','size','color','sku','image'] as const){
